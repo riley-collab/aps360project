@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from tfrecord.torch.dataset import TFRecordDataset
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -64,31 +63,6 @@ train_dataset = get_dataset(train_file_names)
 valid_dataset = get_dataset(valid_file_names)
 test_dataset = get_dataset(test_file_names)
 
-# for i, data in enumerate(train_dataset):
-#     images, labels = data
-#     images = torch.from_numpy(images.numpy())
-#     print(images)
-#     print(labels)
-#     break
-
-# print("Train TFRecord Files:", len(train_file_names))
-# print("Validation TFRecord Files:", len(valid_file_names))
-# print("Test TFRecord Files:", len(test_file_names))
-
-# print(type(train_dataset))
-# train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
-# valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size)
-# test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size)
-
-# data = next(iter(train_loader))
-# print(data)
-
-
-
-
-
-
-
 class SmallNet(nn.Module):
     def __init__(self):
         super(SmallNet, self).__init__()
@@ -107,14 +81,17 @@ class SmallNet(nn.Module):
 def get_accuracy(model, data_loader):
     correct = 0
     total = 0
-    for imgs, labels in data_loader:
-        
-        output = model(imgs)
+    for i, data in enumerate(data_loader):
+        images, labels = data
+        images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
+        labels = torch.from_numpy(labels.numpy())
+
+        output = model(images)
         
         #select index with maximum prediction score
         pred = output.max(1, keepdim=True)[1]
-        correct += pred.eq(labels.view_as(pred)).sum().item()
-        total += imgs.shape[0]
+        correct += pred.eq(torch.max(labels, 1)[1].view_as(pred)).sum().item()
+        total += images.shape[0]
     return correct / total
 
 net = SmallNet()
@@ -133,20 +110,17 @@ for epoch in range(1):
     total_train_err = 0.0
     total_epoch = 0
     for i, data in enumerate(train_dataset):
-        print(i)
         images, labels = data
         images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
         labels = torch.from_numpy(labels.numpy())
-
         if torch.cuda.is_available():
             images = images.cuda()
             labels = labels.cuda()
         optimizer.zero_grad()
         output = net(images)
-        print(output.shape)
-        print(labels.shape)
-        loss = criterion(output, labels)
+        loss = criterion(output, torch.max(labels, 1)[1])
         loss.backward()
         optimizer.step()
     train_accuracy[epoch] = get_accuracy(net, train_dataset)
     validation_accuracy[epoch] = get_accuracy(net, valid_dataset)
+    print(f"Training accuracy: {train_accuracy[epoch]} Validation accuracy: {validation_accuracy[epoch]}")
