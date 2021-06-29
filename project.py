@@ -10,7 +10,7 @@ import pandas as pd
 import random
 import time
 
-batch_size = 64
+batch_size = 1
 image_size = [100, 100]
 
 def read_tfrecord(example):
@@ -64,79 +64,89 @@ train_dataset = get_dataset(train_file_names)
 valid_dataset = get_dataset(valid_file_names)
 test_dataset = get_dataset(test_file_names)
 
+# for i, data in enumerate(train_dataset):
+#     images, labels = data
+#     images = torch.from_numpy(images.numpy())
+#     print(images)
+#     print(labels)
+#     break
+
 # print("Train TFRecord Files:", len(train_file_names))
 # print("Validation TFRecord Files:", len(valid_file_names))
 # print("Test TFRecord Files:", len(test_file_names))
 
-print(type(train_dataset))
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
-valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size)
+# print(type(train_dataset))
+# train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
+# valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=batch_size)
+# test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size)
 
-data = next(iter(train_loader))
-print(data)
-
-
+# data = next(iter(train_loader))
+# print(data)
 
 
 
 
 
-# class CNN(nn.Module):
-#     def __init__(self, kernel_size = 5):
-#         super(CNN, self).__init__()
-#         self.conv1 = nn.Conv2d(3, 5, kernel_size)
-#         self.pool = nn.MaxPool2d(2, 2)
-#         self.conv2 = nn.Conv2d(5, 10, kernel_size)
-#         self.conv_to_fc = 10 * pow(((224-kernel_size+1)//2-kernel_size+1)//2,2)
-#         self.fc1 = nn.Linear(self.conv_to_fc, 32)
-#         self.fc2 = nn.Linear(32, 14)    
 
-#     def forward(self, x):
-#         x = self.pool(F.relu(self.conv1(x)))
-#         x = self.pool(F.relu(self.conv2(x)))
-#         x = x.view(-1, self.conv_to_fc)
-#         x = F.relu(self.fc1(x))
-#         x = self.fc2(x)
-#         return x
 
-# def get_accuracy(model, data_loader):
-#     correct = 0
-#     total = 0
-#     for imgs, labels in data_loader:
+class SmallNet(nn.Module):
+    def __init__(self):
+        super(SmallNet, self).__init__()
+        self.name = "small"
+        self.conv = nn.Conv2d(3, 5, 3)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc = nn.Linear(2880, 14)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv(x)))
+        x = self.pool(x)
+        x = x.view(-1, 2880)
+        x = self.fc(x)
+        return x
+
+def get_accuracy(model, data_loader):
+    correct = 0
+    total = 0
+    for imgs, labels in data_loader:
         
-#         output = model(imgs)
+        output = model(imgs)
         
-#         #select index with maximum prediction score
-#         pred = output.max(1, keepdim=True)[1]
-#         correct += pred.eq(labels.view_as(pred)).sum().item()
-#         total += imgs.shape[0]
-#     return correct / total
+        #select index with maximum prediction score
+        pred = output.max(1, keepdim=True)[1]
+        correct += pred.eq(labels.view_as(pred)).sum().item()
+        total += imgs.shape[0]
+    return correct / total
 
-# net = CNN()
-# if torch.cuda.is_available():
-#     net.cuda()
+net = SmallNet()
+if torch.cuda.is_available():
+    net.cuda()
 
-# criterion = nn.CrossEntropyLoss()
-# optimizer = optim.AdamW(net.parameters(), lr=0.01)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.AdamW(net.parameters(), lr=0.01)
 
-# train_accuracy = np.zeros(1)
-# validation_accuracy = np.zeros(1)
+train_accuracy = np.zeros(1)
+validation_accuracy = np.zeros(1)
 
-# start_time = time.time()
-# for epoch in range(1):
-#     total_train_loss = 0.0
-#     total_train_err = 0.0
-#     total_epoch = 0
-#     for i, data in enumerate(train_loader):
-#         images, labels = data
-#         if torch.cuda.is_available():
-#             images = images.cuda()
-#             labels = labels.cuda()
-#         optimizer.zero_grad()
-#         output = net(images)
-#         loss = criterion(output, labels)
-#         loss.backward()
-#         optimizer.step()
-#     train_accuracy[epoch] = get_accuracy(net, train_loader)
-#     validation_accuracy[epoch] = get_accuracy(net, valid_loader)
+start_time = time.time()
+for epoch in range(1):
+    total_train_loss = 0.0
+    total_train_err = 0.0
+    total_epoch = 0
+    for i, data in enumerate(train_dataset):
+        print(i)
+        images, labels = data
+        images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
+        labels = torch.from_numpy(labels.numpy())
+
+        if torch.cuda.is_available():
+            images = images.cuda()
+            labels = labels.cuda()
+        optimizer.zero_grad()
+        output = net(images)
+        print(output.shape)
+        print(labels.shape)
+        loss = criterion(output, labels)
+        loss.backward()
+        optimizer.step()
+    train_accuracy[epoch] = get_accuracy(net, train_dataset)
+    validation_accuracy[epoch] = get_accuracy(net, valid_dataset)
