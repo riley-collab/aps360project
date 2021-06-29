@@ -9,7 +9,9 @@ import pandas as pd
 import random
 import time
 
-batch_size = 1
+batch_size = 1     # TODO: different batch sizes don't work right now, need to fix this
+num_epochs = 1
+learning_rate = 0.01
 image_size = [100, 100]
 
 def read_tfrecord(example):
@@ -41,6 +43,15 @@ def get_dataset(filenames):
     
     return dataset
 
+def process_loader(dataset):
+    loader = []
+    for i, data in enumerate(dataset):
+        images, labels = data
+        images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
+        labels = torch.from_numpy(labels.numpy())
+        loader.append([images, labels])
+    return loader
+
 df = pd.read_csv('preprocessed_data.csv')
 
 tfrlist = ['data/' + x for x in os.listdir('data')]
@@ -59,10 +70,13 @@ for elem in list(df.columns)[2:]:
     feature_description[elem] = tf.io.FixedLenFeature([], tf.int64)
 feature_description['image'] = tf.io.FixedLenFeature([], tf.string)
 
-train_dataset = get_dataset(train_file_names)
-valid_dataset = get_dataset(valid_file_names)
-test_dataset = get_dataset(test_file_names)
+train_loader = process_loader(get_dataset(train_file_names))
+valid_loader = process_loader(get_dataset(valid_file_names))
+test_loader = process_loader(get_dataset(test_file_names))
 
+
+
+# ALL CODE BELOW IS TEMPLATE CODE THAT WORKS WITH THE DATASET
 class SmallNet(nn.Module):
     def __init__(self):
         super(SmallNet, self).__init__()
@@ -83,13 +97,11 @@ def get_accuracy(model, data_loader):
     total = 0
     for i, data in enumerate(data_loader):
         images, labels = data
-        images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
-        labels = torch.from_numpy(labels.numpy())
 
         output = model(images)
         
         #select index with maximum prediction score
-        pred = output.max(1, keepdim=True)[1]
+        pred = output.max(1, keepdim=True)[1]               # TODO: only compares highest output prediction (even if it's small), need to fix this
         correct += pred.eq(torch.max(labels, 1)[1].view_as(pred)).sum().item()
         total += images.shape[0]
     return correct / total
@@ -99,20 +111,18 @@ if torch.cuda.is_available():
     net.cuda()
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.AdamW(net.parameters(), lr=0.01)
+optimizer = optim.AdamW(net.parameters(), lr=learning_rate)
 
-train_accuracy = np.zeros(1)
-validation_accuracy = np.zeros(1)
+train_accuracy = np.zeros(num_epochs)
+validation_accuracy = np.zeros(num_epochs)
 
 start_time = time.time()
-for epoch in range(1):
+for epoch in range(num_epochs):
     total_train_loss = 0.0
     total_train_err = 0.0
     total_epoch = 0
-    for i, data in enumerate(train_dataset):
+    for i, data in enumerate(train_loader):
         images, labels = data
-        images = torch.from_numpy(images.numpy()).permute(0, 3, 1, 2)
-        labels = torch.from_numpy(labels.numpy())
         if torch.cuda.is_available():
             images = images.cuda()
             labels = labels.cuda()
@@ -121,6 +131,6 @@ for epoch in range(1):
         loss = criterion(output, torch.max(labels, 1)[1])
         loss.backward()
         optimizer.step()
-    train_accuracy[epoch] = get_accuracy(net, train_dataset)
-    validation_accuracy[epoch] = get_accuracy(net, valid_dataset)
+    train_accuracy[epoch] = get_accuracy(net, train_loader)
+    validation_accuracy[epoch] = get_accuracy(net, valid_loader)
     print(f"Training accuracy: {train_accuracy[epoch]} Validation accuracy: {validation_accuracy[epoch]}")
