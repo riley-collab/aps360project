@@ -1,2 +1,8 @@
 data/
 preprocessed_data.csv
+workspace.code-workspace
+__pycache__/preprocessing.cpython-38.pyc
+__pycache__/training.cpython-38.pyc
+__pycache__/main.cpython-38.pyc
+training.png
+validation.png
